@@ -1,12 +1,12 @@
-Function Calculate-File-Hash($filepath) {
-    $filehash = Get-FileHash -Path $filepath -Algorithm SHA512
-    return $filehash
+Function Calculate-File-Checksum($filepath) {
+    $filechecksum = Get-FileHash -Path $filepath -Algorithm SHA512
+    return $filechecksum
 }
-Function Erase-Baseline-If-Already-Exists() {
+Function Remove-Existing-Baseline() {
     $baselineExists = Test-Path -Path .\baseline.txt
 
     if ($baselineExists) {
-        # Delete it
+        # if pre exist, then delete
         Remove-Item -Path .\baseline.txt
     }
 }
@@ -15,72 +15,59 @@ Function Erase-Baseline-If-Already-Exists() {
 Write-Host ""
 Write-Host "What would you like to do?"
 Write-Host ""
-Write-Host "    A) Collect new Baseline?"
-Write-Host "    B) Begin monitoring files with saved Baseline?"
+Write-Host "A) Collect new Baseline?"
+Write-Host "B) Start monitoring files ?"
 Write-Host ""
 $response = Read-Host -Prompt "Please enter 'A' or 'B'"
 Write-Host ""
 
 if ($response -eq "A".ToUpper()) {
-    # Delete baseline.txt if it already exists
-    Erase-Baseline-If-Already-Exists
-
-    # Calculate Hash from the target files and store in baseline.txt
-    # Collect all files in the target folder
+    Remove-Existing-Baseline
+    #collect files
     $files = Get-ChildItem -Path .\Files
-
-    # For each file, calculate the hash, and write to baseline.txt
+    # calculate the hash
     foreach ($f in $files) {
-        $hash = Calculate-File-Hash $f.FullName
-        "$($hash.Path)|$($hash.Hash)" | Out-File -FilePath .\baseline.txt -Append
+        $checksum = Calculate-File-Checksum $f.FullName
+        "$($checksum.Path)|$($checksum.Hash)" | Out-File -FilePath .\baseline.txt -Append
     }
     
 }
 
 elseif ($response -eq "B".ToUpper()) {
     
-    $fileHashDictionary = @{}
-
-    # Load file|hash from baseline.txt and store them in a dictionary
-    $filePathsAndHashes = Get-Content -Path .\baseline.txt
+    $fileChecksumDictionary = @{}
+    $filePathsAndChecksums = Get-Content -Path .\baseline.txt
     
-    foreach ($f in $filePathsAndHashes) {
-         $fileHashDictionary.add($f.Split("|")[0],$f.Split("|")[1])
+    foreach ($f in $filePathsAndChecksums) {
+         $fileChecksumDictionary.add($f.Split("|")[0],$f.Split("|")[1])
     }
 
-    # Begin (continuously) monitoring files with saved Baseline
     while ($true) {
-        Start-Sleep -Seconds 1
-        
+        Start-Sleep -Seconds 1   
         $files = Get-ChildItem -Path .\Files
-
-        # For each file, calculate the hash, and write to baseline.txt
         foreach ($f in $files) {
-            $hash = Calculate-File-Hash $f.FullName
+            $checksum = Calculate-File-Checksum $f.FullName
             #"$($hash.Path)|$($hash.Hash)" | Out-File -FilePath .\baseline.txt -Append
-
-            # Notify if a new file has been created
-            if ($fileHashDictionary[$hash.Path] -eq $null) {
-                # A new file has been created!
-                Write-Host "$($hash.Path) has been created!" -ForegroundColor Green
+            if ($fileChecksumDictionary[$checksum.Path] -eq $null) {
+                # new file 
+                Write-Host "$($checksum.Path) has been created!" -ForegroundColor Green
             }
             else {
 
-                # Notify if a new file has been changed
-                if ($fileHashDictionary[$hash.Path] -eq $hash.Hash) {
-                    # The file has not changed
+                # new file changed
+                if ($fileChecksumDictionary[$checksum.Path] -eq $checksum.Hash) {
+                    # file not changed
                 }
                 else {
-                    # File file has been compromised!, notify the user
-                    Write-Host "$($hash.Path) has changed!!!" -ForegroundColor Yellow
+                    # notify the user
+                    Write-Host "$($checksum.Path) has changed!!!" -ForegroundColor Blue
                 }
             }
         }
 
-        foreach ($key in $fileHashDictionary.Keys) {
+        foreach ($key in $fileChecksumDictionary.Keys) {
             $baselineFileStillExists = Test-Path -Path $key
             if (-Not $baselineFileStillExists) {
-                # One of the baseline files must have been deleted, notify the user
                 Write-Host "$($key) has been deleted!" -ForegroundColor DarkRed -BackgroundColor Gray
             }
         }
